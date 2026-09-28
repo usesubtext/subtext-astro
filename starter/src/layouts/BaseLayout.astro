@@ -1,0 +1,31 @@
+---
+import "@/styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+const canonicalUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site) : undefined;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="icon" href="/favicon.svg" />
+    {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+    {description && <meta name="description" content={description} />}
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
+    {description && <meta property="og:description" content={description} />}
+    <title>{title}</title>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

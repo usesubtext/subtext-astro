@@ -1,0 +1,14 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+Astro.response.status = 404;
+---
+
+<BaseLayout title="Page not found">
+  <main class="grid min-h-screen place-items-center px-6 text-center">
+    <div>
+      <h1 class="text-5xl font-semibold">Page not found</h1>
+      <a class="mt-6 inline-block underline underline-offset-4" href="/">Return home</a>
+    </div>
+  </main>
+</BaseLayout>

@@ -1,0 +1,7 @@
+{
+  "name": "subtext-astro",
+  "private": true,
+  "scripts": {
+    "dev": "cd starter && npm link ../plugin --no-audit --no-fund && npm run dev"
+  }
+}

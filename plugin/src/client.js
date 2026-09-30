@@ -1,6 +1,6 @@
 const SOURCE = "[data-subtext-source-file]";
 const ACTIVE_KEY = "subtext:edit-text";
-const ACCENT = "#6d4aff";
+const ACCENT = "#136fa4";
 
 let active = readActive();
 let hovered = null;
@@ -9,8 +9,8 @@ let editing = null;
 const pageStyle = document.createElement("style");
 pageStyle.textContent = `
   astro-dev-toolbar { display: none !important; }
-  [data-subtext-hover] { outline: 2px dashed ${ACCENT} !important; outline-offset: 3px; cursor: text !important; }
-  [data-subtext-editing] { outline: 2px solid ${ACCENT} !important; outline-offset: 3px; cursor: text !important; }
+  [data-subtext-hover], [data-subtext-editing] { cursor: text !important; }
+  [data-subtext-editing] { outline: none !important; }
 `;
 document.head.append(pageStyle);
 
@@ -18,13 +18,19 @@ const host = document.createElement("subtext-tools");
 const shadow = host.attachShadow({ mode: "open" });
 shadow.innerHTML = `
   <style>
-    :host { all: initial; position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; font: 500 13px/1.2 system-ui, sans-serif; }
-    .bar { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-    button { all: unset; cursor: pointer; padding: 10px 14px; border-radius: 999px; background: #111; color: #fff; box-shadow: 0 4px 16px rgb(0 0 0 / 0.25); }
+    :host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; font: 500 13px/1.2 system-ui, sans-serif; }
+    .highlight { position: fixed; box-sizing: border-box; border: 2px solid #fff; }
+    .highlight::after { content: ""; position: absolute; inset: -2px; border: 2px dashed ${ACCENT}; border-radius: inherit; }
+    .highlight.editing { border: 0; box-shadow: 0 0 0 1px #fff, 0 0 0 4px ${ACCENT}, 0 0 0 5px #fff; }
+    .highlight.editing::after { display: none; }
+    .highlight[hidden] { display: none; }
+    .bar { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: auto; }
+    button { all: unset; cursor: pointer; padding: 10px 14px; border-radius: 999px; background: #111; color: #fff; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.4), 0 4px 16px rgb(0 0 0 / 0.25); }
     button[aria-pressed="true"] { background: ${ACCENT}; }
-    .toast { max-width: 280px; padding: 10px 12px; border-radius: 8px; background: #111; color: #fff; box-shadow: 0 4px 16px rgb(0 0 0 / 0.25); }
+    .toast { max-width: 280px; padding: 10px 12px; border-radius: 8px; background: #111; color: #fff; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.4), 0 4px 16px rgb(0 0 0 / 0.25); }
     .toast[hidden] { display: none; }
   </style>
+  <div class="highlight" hidden></div>
   <div class="bar">
     <div class="toast" role="status" hidden></div>
     <button type="button"></button>
@@ -33,11 +39,13 @@ shadow.innerHTML = `
 
 const toggle = shadow.querySelector("button");
 const toast = shadow.querySelector(".toast");
+const highlight = shadow.querySelector(".highlight");
 let toastTimer;
 
 toggle.addEventListener("click", () => setActive(!active));
 document.body.append(host);
 render();
+requestAnimationFrame(track);
 
 document.addEventListener("mouseover", (event) => {
   if (!active || editing) {
@@ -83,6 +91,28 @@ document.addEventListener(
   },
   true,
 );
+
+function track() {
+  const target = editing ?? hovered;
+
+  if (target?.isConnected) {
+    const rect = target.getBoundingClientRect();
+    const radius = Math.min(parseFloat(getComputedStyle(target).borderTopLeftRadius) || 0, rect.height / 2);
+    Object.assign(highlight.style, {
+      top: `${rect.top - 3}px`,
+      left: `${rect.left - 3}px`,
+      width: `${rect.width + 6}px`,
+      height: `${rect.height + 6}px`,
+      borderRadius: `${Math.max(radius + 3, 4)}px`,
+    });
+    highlight.classList.toggle("editing", target === editing);
+    highlight.hidden = false;
+  } else {
+    highlight.hidden = true;
+  }
+
+  requestAnimationFrame(track);
+}
 
 function candidateFor(target) {
   const element = target instanceof Element ? target.closest(SOURCE) : null;

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { createTextMiddleware } from "./text.js";
+
+const textModule = new URL("./text.js", import.meta.url);
 
 export default function subtext() {
   let root;
@@ -7,19 +8,24 @@ export default function subtext() {
   return {
     name: "@usesubtext/astro",
     hooks: {
-      "astro:config:setup": ({ command, config, updateConfig, injectScript }) => {
+      "astro:config:setup": ({ command, config, updateConfig, injectScript, addWatchFile }) => {
         if (command !== "dev") {
           return;
         }
 
         root = fileURLToPath(config.root);
+        addWatchFile(textModule);
         updateConfig({ devToolbar: { enabled: true }, vite: { plugins: [preserveSourceAnnotations()] } });
         injectScript("page", `import "@usesubtext/astro/client";`);
       },
-      "astro:server:setup": ({ server }) => {
-        if (root) {
-          server.middlewares.use(createTextMiddleware(root));
+      "astro:server:setup": async ({ server }) => {
+        if (!root) {
+          return;
         }
+
+        const { createTextMiddleware } = await import(`${textModule.href}?t=${Date.now()}`);
+        server.watcher.add(fileURLToPath(textModule));
+        server.middlewares.use(createTextMiddleware(root));
       },
     },
   };

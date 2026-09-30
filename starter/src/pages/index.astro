@@ -1,15 +1,14 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-
-const title = "New site";
-const description = "This site is managed with Subtext.";
 ---
 
-<BaseLayout title={title} description={description}>
+<BaseLayout title="New site" description="This site is managed with Subtext.">
   <main class="grid min-h-screen place-items-center bg-neutral-950 px-6 text-white">
     <div class="max-w-2xl">
-      <h1 class="text-5xl font-semibold tracking-tight sm:text-7xl">{title}</h1>
-      <p class="mt-6 max-w-xl text-lg leading-8 text-neutral-300">{description}</p>
+      <h1 class="text-5xl font-semibold tracking-tight sm:text-7xl">New site</h1>
+      <p class="mt-6 max-w-xl text-lg leading-8 text-neutral-300">
+        This site is managed with Subtext.
+      </p>
     </div>
   </main>
 </BaseLayout>

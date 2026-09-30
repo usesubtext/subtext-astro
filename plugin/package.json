@@ -1,0 +1,27 @@
+{
+  "name": "@usesubtext/astro",
+  "version": "0.0.1",
+  "description": "Subtext tools for Astro dev servers",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/usesubtext/subtext-astro.git",
+    "directory": "plugin"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./client": "./src/client.js"
+  },
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "astro": "^7.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,24 +1,49 @@
-# subtext
+# Subtext for Astro
 
-Subtext Astro plugin and starter
+The Astro plugin and starter behind every [Subtext](https://usesubtext.ai)
+site.
 
-## Developing the plugin
+- **`plugin/`** is `@usesubtext/astro`, the plugin a site needs to publish on
+  Subtext. It adds Subtext's editing tools to previews and does nothing on the
+  live site.
+- **`starter/`** is the site every new Subtext site starts from.
 
-```sh
-npm run dev
-```
+## Bringing your own Astro site
 
-Runs the starter against the local `plugin/` instead of the published
-package. Changes to `plugin/src/client.js` apply on page reload, and changes
-to `plugin/src/text.js` restart the dev server. Changes to
-`plugin/src/index.js` need a manual restart.
-
-Running `pnpm install --ignore-workspace` in `starter/` switches it back to
-the published package.
-
-## Releasing the plugin
+Any Astro 7 site can move to Subtext. Add the plugin:
 
 ```sh
-cd plugin && npm version patch && npm publish
-cd ../starter && pnpm add --save-exact --ignore-workspace @usesubtext/astro@<version>
+pnpm add @usesubtext/astro
 ```
+
+Then add it to your Astro config:
+
+```ts
+import { defineConfig } from "astro/config";
+import subtext from "@usesubtext/astro";
+
+export default defineConfig({
+  integrations: [subtext()],
+});
+```
+
+Subtext checks for the plugin when you publish, and won't publish a site
+without it. For now, sites also need to build to static output, without an
+adapter. pnpm, npm and yarn all work; bun isn't supported.
+
+## What the plugin does
+
+In a preview, "Edit text" lets you change text on the page directly. Edits
+stay on the page until you save them all at once, or cancel to discard them.
+Text that comes from props, slots, expressions or content files can't be
+edited this way yet; ask your LLM instead.
+
+The plugin also leaves a small marker in each build so Subtext can tell the
+plugin was there. Subtext removes it before the site goes live.
+
+See [`plugin/README.md`](plugin/README.md) for the details.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for working on the plugin locally and
+releasing it.

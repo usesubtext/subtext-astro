@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [plugin/package.json]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugin
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Check whether this version is already on npm
+        id: check
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if npm view "$name@$version" version --prefer-online >/dev/null 2>&1; then
+            echo "$name@$version is already published."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          set +e
+          output=$(npm publish 2>&1)
+          status=$?
+          echo "$output"
+          if [ $status -ne 0 ] && echo "$output" | grep -q "previously staged version \"${{ steps.check.outputs.version }}\""; then
+            echo "npm already accepted ${{ steps.check.outputs.version }} and is holding it before it goes live."
+            exit 0
+          fi
+          exit $status

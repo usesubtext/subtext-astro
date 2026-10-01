@@ -2,6 +2,6 @@
   "name": "subtext-astro",
   "private": true,
   "scripts": {
-    "dev": "cd starter && npm link ../plugin --no-audit --no-fund && npm run dev"
+    "dev": "cd starter && pnpm install --frozen-lockfile --ignore-workspace && mkdir -p node_modules/@usesubtext && rm -rf node_modules/@usesubtext/astro && ln -s ../../../plugin node_modules/@usesubtext/astro && pnpm run dev"
   }
 }

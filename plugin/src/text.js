@@ -1,11 +1,10 @@
+import { execFile } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
-const ROUTES = {
-  "/__subtext/text/check": check,
-  "/__subtext/text/save": save,
-};
+const run = promisify(execFile);
 
 const ENTITIES = {
   amp: "&",
@@ -13,33 +12,50 @@ const ENTITIES = {
   gt: ">",
   quot: '"',
   apos: "'",
-  nbsp: " ",
-  mdash: "—",
-  ndash: "–",
-  hellip: "…",
-  lsquo: "‘",
-  rsquo: "’",
-  ldquo: "“",
-  rdquo: "”",
-  copy: "©",
-  reg: "®",
-  trade: "™",
+  nbsp: "\u00a0",
+  mdash: "\u2014",
+  ndash: "\u2013",
+  hellip: "\u2026",
+  lsquo: "\u2018",
+  rsquo: "\u2019",
+  ldquo: "\u201c",
+  rdquo: "\u201d",
+  copy: "\u00a9",
+  reg: "\u00ae",
+  trade: "\u2122",
 };
 
 class Refusal extends Error {}
 
 export function createTextMiddleware(root) {
-  const src = path.join(realpathSync(root), "src") + path.sep;
+  const site = realpathSync(root);
+  const src = path.join(site, "src") + path.sep;
+  let lastSave = Promise.resolve(null);
+
+  const routes = {
+    "POST /__subtext/text/check": (body) => check(src, body),
+    "POST /__subtext/text/save": (body) => {
+      const saving = lastSave.then(() => save(site, src, body));
+      lastSave = saving.then(
+        (result) => ({ ok: true, ...result }),
+        (error) => ({ ok: false, error: error.message }),
+      );
+
+      return saving;
+    },
+    "GET /__subtext/text/last-save": () => lastSave,
+  };
 
   return async (req, res, next) => {
-    const route = ROUTES[req.url?.split("?")[0]];
+    const route = routes[`${req.method} ${req.url?.split("?")[0]}`];
 
-    if (req.method !== "POST" || !route) {
+    if (!route) {
       return next();
     }
 
     try {
-      respond(res, 200, await route(src, JSON.parse(await readBody(req))));
+      const body = req.method === "POST" ? JSON.parse(await readBody(req)) : null;
+      respond(res, 200, await route(body));
     } catch (error) {
       respond(res, error instanceof Refusal ? 422 : 500, { error: error.message });
     }
@@ -60,27 +76,88 @@ async function check(src, { file, loc, tag, text }) {
   }
 }
 
-async function save(src, { file, loc, tag, oldText, newText }) {
-  const replacement = collapse(String(newText ?? ""));
-
-  if (replacement === "") {
-    throw new Refusal("Text can't be empty.");
+async function save(site, src, { page, edits }) {
+  if (!Array.isArray(edits) || edits.length === 0) {
+    throw new Refusal("There are no changes to save.");
   }
 
-  const found = await locate(src, file, loc, tag, oldText);
+  const changes = [];
 
-  if (replacement === collapse(oldText)) {
-    return { changed: false };
+  for (const edit of edits) {
+    const replacement = collapse(String(edit.newText ?? ""));
+
+    if (replacement === "") {
+      throw new Refusal("Text can't be empty.");
+    }
+
+    let found;
+
+    try {
+      found = await locate(src, edit.file, edit.loc, edit.tag, edit.oldText);
+    } catch (error) {
+      if (error instanceof Refusal) {
+        throw new Refusal(`"${collapse(String(edit.oldText ?? ""))}" changed since you started editing. Reload and try again.`);
+      }
+
+      throw error;
+    }
+
+    if (changes.some((change) => change.path === found.path && change.start === found.start)) {
+      throw new Refusal("The same text was edited twice. Reload and try again.");
+    }
+
+    if (replacement !== collapse(edit.oldText)) {
+      changes.push({ ...found, before: collapse(edit.oldText), after: replacement });
+    }
   }
 
-  const content = found.source.slice(found.start, found.end);
-  const leading = content.match(/^\s*/)[0];
-  const trailing = content.match(/\s*$/)[0];
-  const updated = found.source.slice(0, found.start) + leading + encode(replacement) + trailing + found.source.slice(found.end);
+  if (changes.length === 0) {
+    return { changed: 0 };
+  }
 
-  await writeFile(found.path, updated);
+  const files = [...new Set(changes.map((change) => change.path))];
 
-  return { changed: true, file: path.relative(path.dirname(src), found.path) };
+  for (const file of files) {
+    const spans = changes.filter((change) => change.path === file).sort((a, b) => b.start - a.start);
+    let updated = spans[0].source;
+
+    for (const span of spans) {
+      const content = updated.slice(span.start, span.end);
+      const leading = content.match(/^\s*/)[0];
+      const trailing = content.match(/\s*$/)[0];
+      updated = updated.slice(0, span.start) + leading + encode(span.after) + trailing + updated.slice(span.end);
+    }
+
+    await writeFile(file, updated);
+  }
+
+  const result = { changed: changes.length, files: files.map((file) => path.relative(site, file)) };
+
+  if (process.env.SUBTEXT_PRISM !== "1") {
+    return result;
+  }
+
+  return { ...result, ...(await commit(site, files, page, changes)) };
+}
+
+async function commit(site, files, page, changes) {
+  const subject = `Edit text on ${typeof page === "string" && page.startsWith("/") ? page : "the site"}`;
+  const body = changes.map((change) => `- "${change.before}" → "${change.after}"`).join("\n");
+
+  try {
+    await run("git", ["add", "--", ...files], { cwd: site });
+    await run("git", ["commit", "-q", "-m", subject, "-m", body, "--", ...files], { cwd: site });
+  } catch (error) {
+    return { committed: false, error: `Your changes were written but couldn't be saved to the prism: ${error.stderr?.trim() || error.message}` };
+  }
+
+  try {
+    await run("git", ["push", "-q"], { cwd: site });
+  } catch (error) {
+    return { committed: true, pushed: false, error: `Your changes were saved but couldn't be sent: ${error.stderr?.trim() || error.message}` };
+  }
+
+  return { committed: true, pushed: true };
 }
 
 async function locate(src, file, loc, tag, text) {
@@ -197,7 +274,7 @@ function encode(text) {
     .replace(/</g, "&lt;")
     .replace(/{/g, "&#123;")
     .replace(/}/g, "&#125;")
-    .replace(/ /g, "&nbsp;");
+    .replace(/\u00a0/g, "&nbsp;");
 }
 
 function collapse(text) {

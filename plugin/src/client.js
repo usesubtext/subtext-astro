@@ -3,6 +3,10 @@ const ACTIVE_KEY = "subtext:edit-text";
 const SAVING_KEY = "subtext:saving";
 const NOTICE_KEY = "subtext:notice";
 const ACCENT = "#136fa4";
+const PAUSED_PATH = "/__subtext/paused";
+const HIDDEN_PAUSE_MS = 15 * 60 * 1000;
+const INACTIVE_PAUSE_MS = 45 * 60 * 1000;
+const HEARTBEAT_MS = 5 * 60 * 1000;
 
 let active = readSession(ACTIVE_KEY);
 let hovered = null;
@@ -11,6 +15,9 @@ let stopEditing = null;
 let editingBefore = null;
 let saving = false;
 const pending = new Map();
+let lastActivity = Date.now();
+let hiddenSince = document.hidden ? Date.now() : null;
+let lastHeartbeat = 0;
 
 const pageStyle = document.createElement("style");
 pageStyle.textContent = `
@@ -65,6 +72,19 @@ render();
 requestAnimationFrame(track);
 showCarriedNotice();
 reportInterruptedSave();
+setInterval(pauseIfIdle, 30000);
+
+for (const type of ["pointerdown", "pointermove", "keydown", "wheel", "scroll", "touchstart"]) {
+  window.addEventListener(type, markActive, { capture: true, passive: true });
+}
+
+document.addEventListener("visibilitychange", () => {
+  hiddenSince = document.hidden ? Date.now() : null;
+
+  if (!document.hidden) {
+    markActive();
+  }
+});
 
 window.addEventListener("beforeunload", (event) => {
   if (changeCount() > 0 && !saving) {
@@ -143,6 +163,25 @@ function track() {
   }
 
   requestAnimationFrame(track);
+}
+
+function markActive() {
+  lastActivity = Date.now();
+
+  if (lastActivity - lastHeartbeat > HEARTBEAT_MS) {
+    lastHeartbeat = lastActivity;
+    import.meta.hot?.send("subtext:active");
+  }
+}
+
+function pauseIfIdle() {
+  const idle = hiddenSince === null ? Date.now() - lastActivity > INACTIVE_PAUSE_MS : Date.now() - hiddenSince > HIDDEN_PAUSE_MS;
+
+  if (!idle || saving || changeCount() > 0) {
+    return;
+  }
+
+  location.replace(`${PAUSED_PATH}?path=${encodeURIComponent(location.pathname + location.search + location.hash)}`);
 }
 
 function candidateFor(target) {
